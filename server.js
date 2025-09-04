@@ -41,9 +41,8 @@ async function loadModel() {
   try {
     // Load with optimizations
     generator = await pipeline('text-generation', 'distilgpt2', {
-      quantized: false, // Don't quantize for better speed
-      device: 'cpu',
-      dtype: 'fp32'
+      quantized: true,
+      device: 'cpu'
     });
     console.log('✅ Model loaded successfully');
     modelLoading = false;
