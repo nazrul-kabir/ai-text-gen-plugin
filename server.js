@@ -12,6 +12,8 @@ env.localModelPath = './models/';
 env.allowLocalModels = true;
 env.allowRemoteModels = false;
 env.useBrowserCache = false;
+env.backends.onnx.wasm.numThreads = 4; // Use multiple threads
+env.backends.onnx.wasm.simd = true; 
 
 // Middleware
 app.use(cors());
@@ -37,7 +39,12 @@ async function loadModel() {
   console.log('Loading DistilGPT2 model...');
   
   try {
-    generator = await pipeline('text-generation', 'distilgpt2');
+    // Load with optimizations
+    generator = await pipeline('text-generation', 'distilgpt2', {
+      quantized: false, // Don't quantize for better speed
+      device: 'cpu',
+      dtype: 'fp32'
+    });
     console.log('✅ Model loaded successfully');
     modelLoading = false;
     return generator;
@@ -45,6 +52,21 @@ async function loadModel() {
     console.error('❌ Model loading failed:', error);
     modelLoading = false;
     throw error;
+  }
+}
+
+// Optimized generation with caching and batching
+const generationCache = new Map();
+const MAX_CACHE_SIZE = 100;
+
+function getCacheKey(topic, count) {
+  return `${topic.toLowerCase().trim()}_${count}`;
+}
+
+function cleanCache() {
+  if (generationCache.size > MAX_CACHE_SIZE) {
+    const firstKey = generationCache.keys().next().value;
+    generationCache.delete(firstKey);
   }
 }
 
@@ -87,7 +109,11 @@ async function generateSinglePoint(topic, pointNumber) {
     repetition_penalty: 1.1,
     return_full_text: false,
     pad_token_id: 50256,
-    eos_token_id: 50256
+    eos_token_id: 50256,
+    // Performance optimizations
+      use_cache: true,
+      output_scores: false,
+      output_attentions: false
   });
   
   let point = result[0].generated_text.trim();
@@ -241,32 +267,41 @@ app.get('/api/status', async (req, res) => {
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt, count = 3 } = req.body;
-    
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
-    
-    // Ensure model is loaded
     await loadModel();
-    
-    const requestedCount = Math.min(Math.max(count, 1), 5); // Between 1-5
+    const requestedCount = Math.min(Math.max(count, 1), 5);
+    const cacheKey = getCacheKey(prompt, requestedCount);
+    if (generationCache.has(cacheKey)) {
+      console.log('Serving from cache:', cacheKey);
+      const cached = generationCache.get(cacheKey);
+      return res.json({
+        success: true,
+        topic: prompt,
+        requestedCount,
+        generatedCount: cached.points.length,
+        points: cached.points,
+        generationTime: cached.generationTime,
+        cached: true
+      });
+    }
     console.log(`Generating ${requestedCount} bullet points about: ${prompt}`);
-    
     const startTime = Date.now();
     const points = await generateCompleteSet(prompt, requestedCount);
     const generationTime = Date.now() - startTime;
-    
+    cleanCache();
+    generationCache.set(cacheKey, { points, generationTime });
     console.log(`✅ Generated ${points.length} points in ${generationTime}ms`);
-    
     res.json({
       success: true,
       topic: prompt,
       requestedCount,
       generatedCount: points.length,
       points: points,
-      generationTime: generationTime
+      generationTime: generationTime,
+      cached: false
     });
-    
   } catch (error) {
     console.error('Generation error:', error);
     res.status(500).json({ 
@@ -284,4 +319,9 @@ app.listen(PORT, () => {
   console.log('📝 Bullet point generator API ready!');
 });
 
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down gracefully...');
+  process.exit(0);
+});
 module.exports = app;

@@ -12,9 +12,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@xenova/transformers": "^2.17.2",
+    "@xenova/transformers": "^2.6.0",
     "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "express": "^4.18.2",
+    "onnxruntime-node": "^1.22.0-rev"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
