@@ -28,19 +28,29 @@ let tokenizer = null;
 
 // Enhanced model loading with better configuration
 async function loadModel() {
-  if (generator && tokenizer) return { generator, tokenizer };
+  // Add debugging
+  console.log(`🔍 Model check: generator exists=${!!generator}, modelLoading=${modelLoading}`);
+  
+  // Instant return if model is already loaded
+  if (generator) {
+    console.log('✅ Model already loaded, returning immediately');
+    return generator;
+  }
+  
+  // If currently loading, wait efficiently
   if (modelLoading) {
+    console.log('⏳ Model loading in progress, waiting...');
     while (modelLoading) {
-      await new Promise(resolve => setTimeout(resolve, 50)); // Reduced wait time
+      await new Promise(resolve => setTimeout(resolve, 10));
     }
-    return { generator, tokenizer };
+    return generator;
   }
 
   modelLoading = true;
   console.log('Loading DistilGPT2 model with optimizations...');
   
   try {
-    // Load model with performance optimizations - use non-quantized version
+    // Load model with aggressive performance optimizations
     generator = await pipeline('text-generation', 'distilgpt2', {
       quantized: false,
       device: 'cpu',
@@ -48,23 +58,34 @@ async function loadModel() {
       // Explicitly use the non-quantized model file
       model_file_name: 'decoder_model_merged',
       use_external_data_format: false,
-      provider: 'cpu'
+      provider: 'cpu',
+      // Additional optimizations
+      session_options: {
+        executionProviders: ['cpu'],
+        graphOptimizationLevel: 'all',
+        executionMode: 'sequential',
+        enableProfiling: false
+      }
     });
 
-    // Pre-warm the model with a small generation to optimize memory layout
+    // Pre-warm with minimal overhead
     console.log('Pre-warming model...');
+    const warmupStart = Date.now();
     await generator("Test", {
       max_new_tokens: 1,
       do_sample: false,
-      return_full_text: false
+      return_full_text: false,
+      use_cache: true
     });
-
+    console.log(`Model warmed up in ${Date.now() - warmupStart}ms`);
     console.log('✅ Model loaded and optimized successfully');
     modelLoading = false;
-    return { generator, tokenizer };
+    return generator;
+
   } catch (error) {
     console.error('❌ Model loading failed:', error);
     modelLoading = false;
+    generator = null; // Ensure clean state on failure
     throw error;
   }
 }
@@ -203,7 +224,7 @@ async function generateOptimizedSet(topic, requestedCount) {
       });
 
       for (const singleResult of singleResults) {
-        const cleanPoint = cleanUpSinglePoint(singleResult[0].generated_text, topic);
+        const cleanPoint = cleanUpPoint(singleResult[0].generated_text, topic);
         if (cleanPoint && cleanPoint.length > 10) {
           points.push(cleanPoint);
         }
@@ -214,8 +235,8 @@ async function generateOptimizedSet(topic, requestedCount) {
     return points.slice(0, requestedCount);
 
   } catch (error) {
-    console.warn('Generation failed, using fallback:', error);
-    return generateFallbackPoints(topic, requestedCount);
+    console.warn('Fast generation failed, using minimal fallback:', error);
+    return generateMinimalFallback(topic, requestedCount);
   }
 }
 
@@ -282,36 +303,53 @@ function cleanUpPoint(text, topic) {
   return text;
 }
 
-// Optimized single point cleanup
-function cleanUpSinglePoint(text, topic) {
-  if (!text) return null;
+// Ultra-fast parsing with minimal regex operations
+function fastParsePoints(text, topic, expectedCount) {
+  const points = [];
   
-  text = text.trim();
-  const sentences = text.split(/[.!?]/);
-  if (sentences.length > 0) {
-    let cleanText = sentences[0].trim();
-    if (cleanText.length > 8) {
-      cleanText = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
-      if (!cleanText.match(/[.!?]$/)) {
-        cleanText += '.';
+  // Quick numbered extraction
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (points.length >= expectedCount) break;
+    
+    const match = line.match(/^\s*\d+\.\s*(.+)/);
+    if (match) {
+      let point = match[1].trim();
+      if (point.length > 8) {
+        // Minimal cleanup
+        point = point.replace(/[.!?]*$/, '.');
+        point = point.charAt(0).toUpperCase() + point.slice(1);
+        points.push(`${topic} ${point}`);
       }
-      return `${topic} ${cleanText}`;
     }
   }
-  return null;
+  
+  // Fill remaining with sentence splits if needed
+  if (points.length < expectedCount) {
+    const sentences = text.split(/[.!?]+/).slice(0, expectedCount - points.length);
+    for (const sentence of sentences) {
+      if (points.length >= expectedCount) break;
+      const clean = sentence.trim();
+      if (clean.length > 10 && !clean.match(/^\d/)) {
+        points.push(`${topic} ${clean.charAt(0).toUpperCase()}${clean.slice(1)}.`);
+      }
+    }
+  }
+  
+  return points.slice(0, expectedCount);
 }
 
 // Minimal fallback for extreme cases
-function generateFallbackPoints(topic, count) {
-  const fallbacks = [
-    `${topic} provides significant benefits for users.`,
-    `${topic} has been shown to be effective in various applications.`,
-    `${topic} offers practical solutions for common challenges.`,
-    `${topic} represents an important advancement in its field.`,
-    `${topic} contributes to improved outcomes and efficiency.`
+function generateMinimalFallback(topic, count) {
+  const templates = [
+    "provides significant benefits.",
+    "has proven effectiveness.",
+    "offers practical solutions.",
+    "represents important advancement.",
+    "contributes to better outcomes."
   ];
   
-  return fallbacks.slice(0, count);
+  return templates.slice(0, count).map(t => `${topic} ${t}`);
 }
 
 // Routes (unchanged)
@@ -350,6 +388,7 @@ function calculateCacheHitRate() {
 
 app.post('/api/generate', async (req, res) => {
   const requestStart = Date.now();
+  const timings = {};
   
   try {
     const { prompt, count = 3 } = req.body;
@@ -357,19 +396,25 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Valid prompt is required' });
     }
 
+    timings.validation = Date.now() - requestStart;
+
     // Ensure model is loaded
+    const modelStart = Date.now();
     await loadModel();
+    timings.modelLoad = Date.now() - modelStart;
     
     const requestedCount = Math.min(Math.max(parseInt(count), 1), 5);
     const cacheKey = getCacheKey(prompt.trim(), requestedCount);
     
     // Check cache with LRU update
+    const cacheStart = Date.now();
     if (generationCache.has(cacheKey)) {
       const cached = generationCache.get(cacheKey);
       cached.lastUsed = Date.now();
-      generationCache.set(cacheKey, cached); // Update position
+      generationCache.set(cacheKey, cached);
       
       cacheHits.set(cacheKey, (cacheHits.get(cacheKey) || 0) + 1);
+      timings.cache = Date.now() - cacheStart;
       
       console.log(`💾 Cache hit (${Date.now() - requestStart}ms):`, cacheKey);
       return res.json({
@@ -380,17 +425,21 @@ app.post('/api/generate', async (req, res) => {
         points: cached.points,
         generationTime: cached.generationTime,
         totalTime: Date.now() - requestStart,
-        cached: true
+        cached: true,
+        timings
       });
     }
+    timings.cache = Date.now() - cacheStart;
 
     console.log(`🔄 Generating ${requestedCount} points for: "${prompt}"`);
     const generationStart = Date.now();
     
     const points = await generateOptimizedSet(prompt.trim(), requestedCount);
     const generationTime = Date.now() - generationStart;
+    timings.generation = generationTime;
 
     // Cache with metadata
+    const cacheStoreStart = Date.now();
     cleanCache();
     generationCache.set(cacheKey, { 
       points, 
@@ -398,9 +447,14 @@ app.post('/api/generate', async (req, res) => {
       lastUsed: Date.now(),
       created: Date.now()
     });
+    timings.cacheStore = Date.now() - cacheStoreStart;
 
+    const responseStart = Date.now();
     const totalTime = Date.now() - requestStart;
+    timings.responsePrep = Date.now() - responseStart;
+    
     console.log(`✅ Generated ${points.length}/${requestedCount} points | Gen: ${generationTime}ms | Total: ${totalTime}ms`);
+    console.log(`📊 Timings: validation=${timings.validation}ms, model=${timings.modelLoad}ms, cache=${timings.cache}ms, gen=${timings.generation}ms, store=${timings.cacheStore}ms`);
 
     res.json({
       success: true,
@@ -410,7 +464,8 @@ app.post('/api/generate', async (req, res) => {
       points: points,
       generationTime: generationTime,
       totalTime: totalTime,
-      cached: false
+      cached: false,
+      timings
     });
 
   } catch (error) {
@@ -419,7 +474,8 @@ app.post('/api/generate', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error.message,
-      totalTime: totalTime
+      totalTime: totalTime,
+      timings
     });
   }
 });
