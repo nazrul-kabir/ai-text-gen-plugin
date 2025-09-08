@@ -51,7 +51,7 @@ async function loadModel() {
   
   try {
     // Load model with aggressive performance optimizations
-    generator = await pipeline('text-generation', 'distilgpt2', {
+    generator = await pipeline('text-generation', 'gpt-neo-125M', {
       quantized: false,
       device: 'cpu',
       dtype: 'fp32',
@@ -122,13 +122,30 @@ function cleanCache() {
 // Optimized prompt templates with better structure
 const PROMPT_TEMPLATES = {
   structured: (topic, count) => {
-    const templates = [
-      `Key benefits of ${topic}:\n1.`,
-      `Important facts about ${topic}:\n1.`,
-      `Main advantages of ${topic}:\n1.`,
-      `Essential points about ${topic}:\n1.`
-    ];
-    return templates[Math.floor(Math.random() * templates.length)];
+    // This is a few-shot prompt. It provides high-quality examples to guide the model.
+    // This teaches it to be concise and factual.
+    const fewShotPrompt = `Generate a concise, factual list of bullet points for the given topic.
+
+###
+Topic: Cats
+Output:
+- Are small, carnivorous mammals.
+- Are often kept as domestic pets.
+- Are known for their agility and grace.
+
+###
+Topic: The Sun
+Output:
+- The star at the center of the Solar System.
+- Is a nearly perfect sphere of hot plasma.
+- Its diameter is about 109 times that of Earth.
+
+###
+Topic: ${topic}
+Output:
+-`; // We add a hyphen at the end to ensure it starts with a bullet point.
+
+    return fewShotPrompt;
   },
   
   single: (topic, index) => {
