@@ -5,7 +5,7 @@ const path = require('path');
 const { pipeline, env } = require('@xenova/transformers');
 
 const app = express();
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3006;
 
 // Enhanced transformers environment configuration
 env.localModelPath = './models/';
@@ -47,7 +47,7 @@ async function loadModel() {
   }
 
   modelLoading = true;
-  console.log('Loading DistilGPT2 model with optimizations...');
+  console.log('Loading model with optimizations...');
   
   try {
     // Load model with aggressive performance optimizations
@@ -121,27 +121,33 @@ function cleanCache() {
 
 // Optimized prompt templates with better structure
 const PROMPT_TEMPLATES = {
-  structured: (topic, count) => {
-    // This is a few-shot prompt. It provides high-quality examples to guide the model.
-    // This teaches it to be concise and factual.
-    const fewShotPrompt = `Generate a concise, factual list of bullet points for the given topic.
+  structured: (city, count) => {
+    // Improved few-shot prompt for factual city info, with explicit instruction and New York City example
+    const fewShotPrompt = `Generate a concise, factual list of bullet points about the given city. Each point should be a true fact about the city, suitable for a general audience. Do not make up facts. If unsure, say 'Fact not available.'
 
 ###
-Topic: Cats
+City: Tokyo
 Output:
-- Are small, carnivorous mammals.
-- Are often kept as domestic pets.
-- Are known for their agility and grace.
+- Capital of Japan.
+- Known for its technology and culture.
+- Home to the Tokyo Tower and Shibuya Crossing.
 
 ###
-Topic: The Sun
+City: Paris
 Output:
-- The star at the center of the Solar System.
-- Is a nearly perfect sphere of hot plasma.
-- Its diameter is about 109 times that of Earth.
+- Capital of France.
+- Famous for the Eiffel Tower and the Louvre Museum.
+- Known for its art, fashion, and cuisine.
 
 ###
-Topic: ${topic}
+City: New York City
+Output:
+- Largest city in the United States.
+- Known for Times Square, Central Park, and the Statue of Liberty.
+- Major center for finance, media, and culture.
+
+###
+City: ${city}
 Output:
 -`; // We add a hyphen at the end to ensure it starts with a bullet point.
 
