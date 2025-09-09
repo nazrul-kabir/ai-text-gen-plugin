@@ -47,7 +47,7 @@ async function loadModel() {
   }
 
   modelLoading = true;
-  console.log('Loading DistilGPT2 model with optimizations...');
+  console.log('Loading model with optimizations...');
   
   try {
     // Load model with aggressive performance optimizations
