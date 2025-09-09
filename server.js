@@ -50,12 +50,10 @@ async function loadModel() {
   console.log('Loading model with optimizations...');
   
   try {
-    // Load model with aggressive performance optimizations
     generator = await pipeline('text-generation', 'gpt-neo-125M', {
       quantized: false,
       device: 'cpu',
       dtype: 'fp32',
-      // Explicitly use the non-quantized model file
       model_file_name: 'decoder_model_merged',
       use_external_data_format: false,
       provider: 'cpu',
@@ -69,7 +67,6 @@ async function loadModel() {
     });
 
     // Pre-warm with minimal overhead
-    console.log('Pre-warming model...');
     const warmupStart = Date.now();
     await generator("Test", {
       max_new_tokens: 1,
@@ -77,8 +74,6 @@ async function loadModel() {
       return_full_text: false,
       use_cache: true
     });
-    console.log(`Model warmed up in ${Date.now() - warmupStart}ms`);
-    console.log('✅ Model loaded and optimized successfully');
     modelLoading = false;
     return generator;
 
@@ -122,47 +117,39 @@ function cleanCache() {
 // Optimized prompt templates with better structure
 const PROMPT_TEMPLATES = {
   structured: (city, count) => {
-    // Improved few-shot prompt for factual city info, with explicit instruction and New York City example
-    const fewShotPrompt = `Generate a concise, factual list of bullet points about the given city. Each point should be a true fact about the city, suitable for a general audience. Do not make up facts. If unsure, say 'Fact not available.'
+    // Improved few-shot with better context and instruction clarity
+    const fewShotPrompt = `Task: Generate accurate, interesting facts about cities. Each fact should be specific, verifiable, and informative.
 
-###
-City: Tokyo
-Output:
-- Capital of Japan.
-- Known for its technology and culture.
-- Home to the Tokyo Tower and Shibuya Crossing.
+Example format:
+City: London
+Facts:
+• Capital of England and the United Kingdom
+• Home to iconic landmarks like Big Ben and Tower Bridge
+• Major global financial center with the London Stock Exchange
 
-###
-City: Paris
-Output:
-- Capital of France.
-- Famous for the Eiffel Tower and the Louvre Museum.
-- Known for its art, fashion, and cuisine.
+City: Sydney
+Facts:
+• Largest city in Australia, located in New South Wales
+• Famous for the Sydney Opera House and Harbour Bridge
+• Known for beautiful beaches like Bondi and Manly
 
-###
-City: New York City
-Output:
-- Largest city in the United States.
-- Known for Times Square, Central Park, and the Statue of Liberty.
-- Major center for finance, media, and culture.
-
-###
 City: ${city}
-Output:
--`; // We add a hyphen at the end to ensure it starts with a bullet point.
+Facts:
+•`; // We add a hyphen at the end to ensure it starts with a bullet point.
 
     return fewShotPrompt;
   },
   
   single: (topic, index) => {
+    // More diverse and contextual starters
     const starters = [
-      `${topic} helps by`,
-      `${topic} is valuable because it`,
-      `The benefit of ${topic} is that it`,
-      `${topic} works by`,
-      `${topic} provides`,
-      `${topic} enables`,
-      `${topic} improves`
+      `Here's how ${topic} benefits users:`,
+      `The key advantage of ${topic} is that it`,
+      `${topic} stands out because it`,
+      `What makes ${topic} effective is that it`,
+      `${topic} delivers value by`,
+      `The main strength of ${topic} lies in how it`,
+      `${topic} proves useful when it`
     ];
     return starters[index % starters.length];
   }
