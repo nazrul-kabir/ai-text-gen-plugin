@@ -14,7 +14,7 @@
     <link rel="stylesheet" type="text/css" href="/css/spx_colors.css">
     <style>
         body {
-            background-color: #f8f9fa;
+            background-color: #414C5A; /* .bg_body */
         }
 
         .container-custom {
@@ -25,47 +25,57 @@
 
         .card {
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+            background-color: #272833; /* .bg_grey80 */
+            color: #fff;
         }
 
         h1 {
-            color: #2c3e50;
+            color: #ccc;
             text-align: center;
             margin-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
         }
 
         label {
             font-weight: 600;
-            color: #34495e;
+            color: #fff;
         }
 
         input[type="text"],
         input[type="number"] {
-            border: 2px solid #e1e5e9;
+            border: 2px solid #656e7a; /* .bg_grey15 */
             border-radius: 6px;
             font-size: 16px;
+            color: #000;
             transition: border-color 0.3s;
         }
 
+        ::placeholder {
+            color: #b0b8c1;
+            opacity: 1;
+        }
+
         input:focus {
-            border-color: #3498db;
+            border-color: #295aaf; /* .bg_blue */
             box-shadow: none;
         }
 
         button {
-            background: #3498db;
+            background: #295aaf; /* .bg_blue */
             color: white;
             border: none;
             font-weight: 600;
         }
 
         button:hover:not(:disabled) {
-            background: #2980b9;
+            background: #485a6b; /* .bg_grey */
             transform: translateY(-2px);
         }
 
         button:disabled {
-            background: #bdc3c7;
+            background: #656e7a; /* .bg_grey15 */
             cursor: not-allowed;
         }
 
@@ -78,15 +88,15 @@
         }
 
         .status.loading {
-            background: #e3f2fd;
-            color: #1976d2;
-            border: 1px solid #bbdefb;
+            background: #2f303e; /* .bg_grey60 */
+            color: #295aaf; /* .bg_blue */
+            border: 1px solid #485a6b; /* .bg_grey */
         }
 
         .status.ready {
-            background: #e8f5e8;
+            background: #343D48; /* .bg_grey40 */
             color: #2e7d32;
-            border: 1px solid #c8e6c9;
+            border: 1px solid #295aaf; /* .bg_blue */
         }
 
         .status.error {
@@ -98,9 +108,10 @@
         .results {
             margin-top: 30px;
             padding: 20px;
-            background: #f8f9fa;
+            background: #2f303e; /* .bg_grey60 */
             border-radius: 8px;
-            border-left: 4px solid #3498db;
+            border-left: 4px solid #295aaf; /* .bg_blue */
+            color: #fff;
         }
 
         .bullet-point {
@@ -113,32 +124,33 @@
         .generation-stats {
             margin-top: 15px;
             font-size: 14px;
-            color: #666;
+            color: #b0b8c1;
             font-style: italic;
         }
 
         .examples {
             margin-top: 20px;
             padding: 15px;
-            background: #fff3e0;
+            background: #343D48; /* .bg_grey40 */
             border-radius: 6px;
-            border-left: 4px solid #ff9800;
+            border-left: 4px solid #295aaf; /* .bg_blue */
         }
 
         .examples h4 {
             margin-top: 0;
-            color: #ef6c00;
+            color: #ccc;
         }
 
         .example-item {
             margin: 8px 0;
             cursor: pointer;
-            color: #1976d2;
+            color: #fff; /* High contrast on dark bg */
             text-decoration: underline;
+            transition: color 0.2s;
         }
 
         .example-item:hover {
-            color: #0d47a1;
+            color: #295aaf; /* .bg_blue */
         }
     </style>
 </head>
@@ -146,7 +158,7 @@
 <body>
     <div class="container container-custom">
         <div class="card p-4">
-            <h1>⚡ SPX Bullet Point Generator</h1>
+            <h1>⚡ SPX AI Bullet Point Generator</h1>
 
             <div id="status" class="status loading">Checking model status...</div>
 
@@ -299,7 +311,7 @@
             // Collect bullet points from the results
             const bulletEls = document.querySelectorAll('.bullet-point');
             const bulletPoints = Array.from(bulletEls).map(el => el.textContent.replace(/^•\s*/, '').trim());
-            const bulletText = bulletPoints.join('\n');
+            const bulletText = bulletPoints.join(', '); // Comma separated string
 
             if (window.opener) {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -308,8 +320,8 @@
                 let returnData = {
                     epochID: id,
                     fieldIX: index,
-                    infoTxt: `Bullet points: ${bulletText}`,
-                    value: bulletText,
+                    infoTxt: `Bullet points: [${bulletPoints.map(p => `'${p}'`).join(', ')}]`,
+                    value: JSON.stringify(bulletPoints), // Send as comma-separated string
                 };
                 window.opener.handleReturnValueFromPlugin(returnData);
             }
