@@ -1,0 +1,16 @@
+{
+    "general" :{
+        "title": "BULLET POINT GEN",
+        "width": 800,
+        "height" : 1400,
+        "left": 60,
+        "top": 110
+    },
+
+    "template": {
+        "file": "/softpix/ExtensionDemo/Counter.html",
+        "server": "OVERLAY",
+        "channel": 1,
+        "layer": 6
+    }
+}

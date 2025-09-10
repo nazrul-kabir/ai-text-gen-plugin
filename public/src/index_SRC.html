@@ -6,9 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SPX Bullet Point Generator</title>
     <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <!-- Dependencies from SPX -->
+    <link rel="icon" type="image/png" href="/img/spx-gc.ico">
+    <link rel="stylesheet" type="text/css" href="/css/spx_fonts.css">
+    <link rel="stylesheet" type="text/css" href="/css/spx_layout.css">
+    <link rel="stylesheet" type="text/css" href="/css/spx_forms.css">
+    <link rel="stylesheet" type="text/css" href="/css/spx_colors.css">
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f8f9fa;
         }
 
@@ -26,7 +31,7 @@
         h1 {
             color: #2c3e50;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
         }
 
         label {
@@ -141,7 +146,7 @@
 <body>
     <div class="container container-custom">
         <div class="card p-4">
-            <h1>⚡ Fast Bullet Point Generator</h1>
+            <h1>⚡ SPX Bullet Point Generator</h1>
 
             <div id="status" class="status loading">Checking model status...</div>
 
@@ -152,34 +157,38 @@
                         <input type="text" id="topic" class="form-control" placeholder="e.g., Paris" required>
                     </div>
                     <div class="col-md-3 d-grid">
-                        <button id="generateBtn" class="btn" disabled>Generate</button>
+                        <button id="generateBtn" class="btn btn-secondary" disabled>Generate</button>
                     </div>
                 </div>
             </form>
 
             <div class="examples mt-4">
                 <h4>💡 Try these examples:</h4>
-                <div class="example-item" onclick="setExample('Paris', 3)">3 bullet points about Paris</div>
-                <div class="example-item" onclick="setExample('Helsinki', 3)">3 bullet points about Helsinki</div>
-                <div class="example-item" onclick="setExample('Dublin', 3)">3 bullet points about Dublin</div>
+                <div class="example-item" onclick="setExample('Paris', 3)">Paris</div>
+                <div class="example-item" onclick="setExample('Helsinki', 3)">Helsinki</div>
+                <div class="example-item" onclick="setExample('Dublin', 3)">Dublin</div>
             </div>
 
             <div id="results" class="results" style="display: none;"></div>
+            <div id="returnBtnContainer" class="d-grid mt-4" style="display: none;">
+                <button id="returnBtn" class="btn btn-success btn-lg" style="display: none;">Insert into template</button>
+            </div>
         </div>
     </div>
 
-    <!-- Bootstrap JS (optional for dropdowns, modals etc.) -->
     <script>
         const statusEl = document.getElementById('status');
         const generateBtn = document.getElementById('generateBtn');
         const topicInput = document.getElementById('topic');
         const countInput = document.getElementById('count');
         const resultsEl = document.getElementById('results');
+        const returnBtnContainer = document.getElementById('returnBtnContainer');
+        const returnBtnEl = document.getElementById('returnBtn');
 
         // Check model status on load
         async function checkStatus() {
             try {
-                const response = await fetch('/api/status');
+                const response = await fetch('http://localhost:3006/api/status');
                 const data = await response.json();
                 
                 if (data.status === 'ready') {
@@ -211,14 +220,17 @@
             generateBtn.disabled = true;
             generateBtn.textContent = 'Generating...';
             resultsEl.style.display = 'none';
+            returnBtnEl.style.display = 'none';
+            // Hide the return button while generating
+            returnBtnContainer.style.display = 'none';
             
             statusEl.className = 'status loading';
             statusEl.textContent = `🤖 Generating 3 bullet points about "${topic}"...`;
             
             try {
                 const startTime = Date.now();
-                
-                const response = await fetch('/api/generate', {
+
+                const response = await fetch('http://localhost:3006/api/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -250,25 +262,19 @@
             }
         }
 
-        function displayResults(data, clientTime) {
-            const completionStatus = data.generatedCount === data.requestedCount ? 
-                `✅ Generated all ${data.requestedCount} requested points` :
-                `⚠️ Generated ${data.generatedCount} of ${data.requestedCount} requested points`;
-            
+        function displayResults(data, clientTime) {            
             const bulletPoints = data.points.map(point => 
                 `<div class="bullet-point">• ${point}</div>`
             ).join('');
             
             resultsEl.innerHTML = `
                 <h3>📝 Results for: ${data.topic}</h3>
-                ${bulletPoints}
-                <div class="generation-stats">
-                    ${completionStatus}<br>
-                    Server generation: ${data.generationTime}ms | Total request: ${clientTime}ms
-                </div>
+                ${bulletPoints}                
             `;
             
-            resultsEl.style.display = 'block';
+            resultsEl.style.display = 'block';            
+            // Show the return button after results are displayed
+            returnBtnEl.style.display = 'block';
         }
 
         function setExample(topic, count) {
@@ -288,6 +294,33 @@
 
         // Initialize
         checkStatus();
+
+        document.getElementById('returnBtn').addEventListener('click', function() {
+            // Collect bullet points from the results
+            const bulletEls = document.querySelectorAll('.bullet-point');
+            const bulletPoints = Array.from(bulletEls).map(el => el.textContent.replace(/^•\s*/, '').trim());
+            const bulletText = bulletPoints.join('\n');
+
+            if (window.opener) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const id = urlParams.get("id");
+                const index = urlParams.get("index");
+                let returnData = {
+                    epochID: id,
+                    fieldIX: index,
+                    infoTxt: `Bullet points: ${bulletText}`,
+                    value: bulletText,
+                };
+                window.opener.handleReturnValueFromPlugin(returnData);
+            }
+            // close the popup after returning the value
+            // window.close();
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Always hide the return button on initial page load
+            returnBtnContainer.style.display = 'none';
+        });
     </script>
 </body>
 

@@ -364,7 +364,7 @@ function generateMinimalFallback(topic, count) {
 
 // Routes (unchanged)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public/src', 'index_SRC.html'));
 });
 
 app.get('/api/status', async (req, res) => {
